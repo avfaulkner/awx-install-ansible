@@ -1,0 +1,150 @@
+- hosts: awx-centos
+  vars_files:
+    - vars/main.yml
+  become: yes
+  tasks:
+
+# update current packages and add new packages that require a reboot
+
+    - name: disable selinux
+      selinux:
+        policy: targeted
+        state: permissive
+      when: ansible_distribution == "CentOS"
+
+    - name: Run yum update
+      yum:
+        name: "*"
+        state: latest
+      when: ansible_distribution == "CentOS"
+
+    - name: Run apt update
+      apt:
+        name: "*"
+        state: latest
+        force_apt_get: yes
+      when: ansible_distribution == "Ubuntu"
+
+    - name: yum install epel-release
+      yum:
+          name: "{{ item }}"
+          state: present
+      with_items:
+        - epel-release
+        - yum-utils
+      when: ansible_distribution == "CentOS"
+
+    - name: clean up any pending yum transactions
+      shell: yum-complete-transaction --cleanup-only
+      when: ansible_distribution == "CentOS"
+
+# reboot machine and re-establish connection
+
+    - name: Verify if reboot is needed (CentOS)
+      shell: needs-restarting  -r ; echo $?
+      register: restart
+      when: ansible_distribution == "CentOS"
+      failed_when: restart.rc > 1
+    - debug: var=restart.rc
+
+    - name: Verify if reboot is needed (Ubuntu)
+      stat:
+        path: /var/run/reboot-required
+      register: restart
+      when: ansible_distribution == "Ubuntu"
+    - debug: var=restart.rc
+
+    - name: Reboot immediately if there was a change (CentOS).
+      shell: "sleep 5 && reboot"
+      async: 1
+      poll: 0
+      when:
+        - ansible_distribution == "CentOS"
+        - restart.rc == 1
+
+    - name: Reboot immediately if there was a change (Ubuntu).
+      shell: "sleep 5 && reboot"
+      async: 1
+      poll: 0
+      when:
+        - ansible_distribution == "Ubuntu"
+        - restart.stat.exists == true
+
+    # - name: Wait for the reboot if reboot is necessary
+    #   wait_for_connection:
+    #     connect_timeout: 1 # Maximum number of seconds to wait for a connection to happen before closing and retrying
+    #     sleep: 5 # Number of seconds to sleep between checks
+    #     delay: 5 # Number of seconds to wait before starting to poll
+    #     timeout: 300 # Maximum number of seconds to wait for
+    #   when: restart.rc == 1
+
+    - name: Wait for the reboot if reboot is necessary
+      wait_for_connection:
+        connect_timeout: 1 # Maximum number of seconds to wait for a connection to happen before closing and retrying
+        sleep: 5 # Number of seconds to sleep between checks
+        delay: 5 # Number of seconds to wait before starting to poll
+        timeout: 300 # Maximum number of seconds to wait for
+      when: restart.stat.exists == true
+
+    - name: reboot the instance
+      shell: "sleep 5 && reboot"
+      async: 1
+      poll: 0
+
+    - name: Wait for the reboot to complete
+      wait_for_connection:
+        connect_timeout: 20
+        sleep: 5
+        delay: 5
+        timeout: 300
+
+# continue with package downloads and remaining installations
+    - name: Install required packages
+      package:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        "{{ package_prereqs_centos }}"
+
+    - name: add docker repo
+      shell: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      when: ansible_distribution == "CentOS"
+
+# ansible is needed along with docker
+    - name: pip install ansible
+      shell: pip3 install --upgrade pip && pip3 install ansible==2.9.6
+
+    - name: clone awx repo
+      git:
+        repo:    "{{ awx_repo_url }}"
+        dest:    "{{ awx_install_dir }}"
+        version: "{{ awx_version }}"
+        force:   "{{ awx_git_overwrite }}"
+
+    - name: start docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+  #use custom inventory files
+    - name: add custom inventory files
+      template:
+        src: templates/inventory.j2
+        dest: /opt/awx/installer/inventory
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: modify permissions for playbook directory
+      file:
+        path: /var/lib/awx/projects
+        state: directory
+        owner: "{{ owner }}"
+        group: "{{ group }}"
+
+    - name: start build & deployment
+      become: false
+      shell: "cd {{ awx_install_dir }}/installer/ && ansible-playbook -i {{ awx_install_inventory_file }} {{awx_install_playbook_file }}"
+      tags:
+        - skip_ansible_lint

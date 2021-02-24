@@ -1,0 +1,44 @@
+# required os packages
+package_prereqs_centos:
+   - docker
+   - docker-compose
+   - python36
+   - postgresql-libs 
+   - python-psycopg2
+   - python3-pip
+   - python-pip
+   - git
+   - mlocate
+   - vim
+   - yum-utils
+   - device-mapper-persistent-data
+   - lvm2
+   - python3-devel
+   - python-docker-py
+   - libselinux-python3
+
+awx_repo_url: https://github.com/ansible/awx
+awx_version: 17.0.1 # Replace with whichever version you'd like: see https://github.com/ansible/awx/releases/
+awx_install_dir: /opt/awx
+# overwrite previous awx checkout if present (includes config)
+awx_git_overwrite: true
+awx_install_inventory_file: /opt/awx/installer/inventory
+awx_install_inventory_cluster_file: /opt/awx/installer/inventory_cluster
+# credentials for Aurora Postgres admin
+pg_admin_username: awx_dbadmin
+pg_admin_password: "password"
+
+# credentials to set for the AWX app db user
+awx_pg_cluster: 
+awx_pg_database: awx_db
+awx_pg_port: 43306
+awx_pg_privs: ALL
+
+awx_secret_key: "password"
+awx_admin_password: "password"
+
+# location of the marathon awx build.yml playbook
+awx_install_playbook_file: /opt/awx/installer/install.yml
+
+owner: root
+group: root
