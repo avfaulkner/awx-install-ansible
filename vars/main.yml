@@ -1,3 +1,5 @@
+target_host: local
+
 # required os packages
 package_prereqs_centos:
    - docker
