@@ -1,4 +1,4 @@
-target_host: local
+target_host: awx-centos
 
 # required os packages
 package_prereqs_centos:
@@ -18,6 +18,25 @@ package_prereqs_centos:
    - python3-devel
    - python-docker-py
    - libselinux-python3
+
+package_prereqs_ubuntu:
+   - docker
+   - docker-compose
+   - python36
+   - postgresql-libs 
+   - python-psycopg2
+   - python3-pip
+   - python-pip
+   - git
+   - mlocate
+   - vim
+   - yum-utils
+   - device-mapper-persistent-data
+   - lvm2
+   - python3-devel
+   - python-docker-py
+   - libselinux-python3
+
 
 awx_repo_url: https://github.com/ansible/awx
 awx_version: 17.0.1 # Replace with whichever version you'd like: see https://github.com/ansible/awx/releases/
