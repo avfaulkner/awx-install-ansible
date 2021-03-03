@@ -8,84 +8,103 @@
 
 # update current packages and add new packages that require a reboot
 
-    - name: Set selinux
-      selinux:
-        policy: targeted
-        state: disabled
-      when: ansible_distribution == "CentOS"
+#     - name: Set selinux
+#       selinux:
+#         policy: targeted
+#         state: disabled
+#       when: ansible_distribution == "CentOS"
 
-    - name: Run yum update
-      yum:
-        name: "*"
-        state: latest
-      when: ansible_distribution == "CentOS"
+#     - name: Run yum update
+#       yum:
+#         name: "*"
+#         state: latest
+#       when: ansible_distribution == "CentOS"
 
-    - name: Run apt update
-      apt:
-        name: "*"
-        state: latest
-        force_apt_get: yes
-      when: ansible_distribution == "Ubuntu"
+#     - name: Run apt update
+#       apt:
+#         name: "*"
+#         state: latest
+#         force_apt_get: yes
+#       when: ansible_distribution == "Ubuntu"
 
-    - name: yum install epel-release
-      yum:
-          name: "{{ item }}"
-          state: present
-      with_items:
-        - epel-release
-        - yum-utils
-      when: ansible_distribution == "CentOS"
+#     - name: yum install epel-release
+#       yum:
+#           name: "{{ item }}"
+#           state: present
+#       with_items:
+#         - epel-release
+#         - yum-utils
+#       when: ansible_distribution == "CentOS"
 
-    - name: clean up any pending yum transactions
-      shell: yum-complete-transaction --cleanup-only
-      when: ansible_distribution == "CentOS"
+#     - name: clean up any pending yum transactions
+#       shell: yum-complete-transaction --cleanup-only
+#       when: ansible_distribution == "CentOS"
 
-# reboot machine and re-establish connection
+# # reboot machine and re-establish connection
 
-    - name: reboot the instance
-      shell: "sleep 5 && reboot"
-      async: 1
-      poll: 0
+#     - name: reboot the instance
+#       shell: "sleep 5 && reboot"
+#       async: 1
+#       poll: 0
 
-    - name: Wait for the reboot to complete
-      wait_for_connection:
-        connect_timeout: 20
-        sleep: 5
-        delay: 5
-        timeout: 300
+#     - name: Wait for the reboot to complete
+#       wait_for_connection:
+#         connect_timeout: 20
+#         sleep: 5
+#         delay: 5
+#         timeout: 300
 
-# continue with package downloads and remaining installations
-    - name: Install required packages (CentOS)
-      package:
-        name: "{{ item }}"
-        state: latest
-      with_items:
-        "{{ package_prereqs_centos }}"
-      when: ansible_distribution == "CentOS"
+# # continue with package downloads and remaining installations
+#     - name: Install required packages (CentOS)
+#       package:
+#         name: "{{ item }}"
+#         state: latest
+#       with_items:
+#         "{{ package_prereqs_centos }}"
+#       when: ansible_distribution == "CentOS"
 
-    - name: add docker repo
-      shell: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-      when: ansible_distribution == "CentOS"
+#     - name: add docker repo (CentOS)
+#       shell: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+#       when: ansible_distribution == "CentOS"
 
-    - name: Install required packages (Ubuntu)
-      package:
-        name: "{{ item }}"
-        state: latest
-      with_items:
-        "{{ package_prereqs_ubuntu }}"
-      when: ansible_distribution == "Ubuntu"
+#     - apt: update_cache=yes
+#     - name: Add Docker repo (Ubuntu)
+#       apt_repository:
+#         repo: deb https://download.docker.com/linux/ubuntu bionic stable
+#         state: present
+#       when: ansible_distribution == "Ubuntu"
+
+    # - name: Install required packages (Ubuntu)
+    #   package:
+    #     name: "{{ item }}"
+    #     state: latest
+    #   with_items:
+    #     "{{ package_prereqs_ubuntu }}"
+    #   when: ansible_distribution == "Ubuntu"
 
 
 # ansible is needed along with docker
     - name: pip install ansible
-      shell: pip3 install --upgrade pip && pip3 install ansible==2.9.6
+      shell: pip3 install --upgrade pip && pip3 install ansible==2.9.6 docker-py docker-compose requests==2.14.2
 
-    - name: clone awx repo
-      git:
-        repo:    "{{ awx_repo_url }}"
-        dest:    "{{ awx_install_dir }}"
-        version: "{{ awx_version }}"
-        force:   "{{ awx_git_overwrite }}"
+    - name: Install docker-compose
+      shell: |
+        cd /usr/local/bin/ && curl -s https://api.github.com/repos/docker/compose/releases/latest \
+        | grep browser_download_url \
+        | grep docker-compose-Linux-x86_64 \
+        | cut -d '"' -f 4 \
+        | wget -qi - && chmod +x docker-compose-Linux-x86_64
+
+    # - name: clone awx repo
+    #   git:
+    #     repo:    "{{ awx_repo_url }}"
+    #     dest:    "{{ awx_install_dir }}"
+    #     version: "{{ awx_version }}"
+    #     force:   "{{ awx_git_overwrite }}"
+
+    # - name: Add user to Docker group
+    #   shell: sudo usermod -aG docker $(whoami)
+    #   when: ansible_distribution == "CentOS"
 
     - name: start docker service
       service:
@@ -93,21 +112,21 @@
         state: started
         enabled: yes
 
-  # use custom inventory files
-    - name: add custom inventory files
-      template:
-        src: templates/inventory.j2
-        dest: /opt/awx/installer/inventory
-        owner: "{{ owner }}"
-        group: "{{ group }}"
-        mode: 0644
+  # # use custom inventory files
+  #   - name: add custom inventory files
+  #     template:
+  #       src: templates/inventory.j2
+  #       dest: /opt/awx/installer/inventory
+  #       owner: "{{ owner }}"
+  #       group: "{{ group }}"
+  #       mode: 0644
 
-    - name: modify permissions for playbook directory
-      file:
-        path: /var/lib/awx/projects
-        state: directory
-        owner: "{{ owner }}"
-        group: "{{ group }}"
+  #   - name: modify permissions for playbook directory
+  #     file:
+  #       path: /var/lib/awx/projects
+  #       state: directory
+  #       owner: "{{ owner }}"
+  #       group: "{{ group }}"
 
     - name: start build & deployment
       shell: "cd {{ awx_install_dir }}/installer/ && export PATH=/usr/local/bin:$PATH && ansible-playbook -i {{ awx_install_inventory_file }} {{awx_install_playbook_file }}"
